@@ -15,6 +15,8 @@
 #include <linux/platform_device.h>
 
 
+static bool ccm_probed = false;
+
 /*
  * GPCv2
  */
@@ -29,8 +31,19 @@ static int imx_gpcv2_probe(struct platform_device *pdev)
 		return -EINVAL;
 	}
 
+	/*
+	 * On imx8mp gpcv2 has to wait for the probing  of "imxm8p-ccm" below because
+	 * it is linked (fw/of) as proxy-supplier (SYNC_STATE_ONLY) for its children.
+	 * Otherwise the following message will appear for all children: "imx-gpcv2
+	 * 303a0000.gpc: Failed to create device link (0x180) with
+	 * 30380000.clock-controller" which are quite a few.
+	 */
+	if (!ccm_probed && of_device_is_compatible(dev->of_node, "fsl,imx8mp-gpc"))
+		return -EPROBE_DEFER;
+
 	return 0;
 }
+
 
 static const struct of_device_id imx_gpcv2_dt_ids[] = {
 	{ .compatible = "fsl,imx8mp-gpc" },
@@ -50,15 +63,15 @@ static struct platform_driver imx_gpc_driver = {
 builtin_platform_driver(imx_gpc_driver)
 
 
-static int imx8mp_probe(struct platform_device *pdev)
+/*
+ * Pincontrol
+ */
+static int imx8mp_probe_pinctrl(struct platform_device *pdev)
 {
 	return 0;
 };
 
 
-/*
- * Pincontrol
- */
 static const struct of_device_id imx8mp_pinctrl_dt_ids[] = {
 	{ .compatible = "fsl,imx8mp-iomuxc", },
 	{ }
@@ -70,8 +83,9 @@ static struct platform_driver imx8mp_pinctrl_driver = {
 		.name = "imx8mp-pinctrl",
 		.of_match_table = imx8mp_pinctrl_dt_ids,
 	},
-	.probe = imx8mp_probe,
+	.probe = imx8mp_probe_pinctrl
 };
+
 
 static int __init imx8mp_pinctrl_init(void)
 {
@@ -84,6 +98,13 @@ arch_initcall(imx8mp_pinctrl_init);
 /*
  * Clock driver
  */
+static int imx8mp_probe_ccm(struct platform_device *pdev)
+{
+	ccm_probed = true;
+	return 0;
+};
+
+
 static const struct of_device_id imx8mp_clk_dt_ids[] = {
 	{ .compatible = "fsl,imx8mp-ccm" },
 	{  }
@@ -91,7 +112,7 @@ static const struct of_device_id imx8mp_clk_dt_ids[] = {
 
 
 static struct platform_driver imx8mp_clk_driver = {
-	.probe = imx8mp_probe,
+	.probe = imx8mp_probe_ccm,
 	.driver = {
 		.name = "imx8mp-ccm",
 		.of_match_table = imx8mp_clk_dt_ids,
