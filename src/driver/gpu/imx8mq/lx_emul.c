@@ -58,11 +58,10 @@ void *lx_drm_open(void)
 {
 	int err;
 	struct lx_drm_private *lx_drm_prv;
-
 	if (!_drm_fops || !_drm_fops->open)
 		return NULL;
 
-	lx_drm_prv = (struct lx_drm_private*)kzalloc(sizeof (struct lx_drm_private), 0);
+	lx_drm_prv = (struct lx_drm_private*)kzalloc(sizeof (struct lx_drm_private), GFP_KERNEL);
 	if (!lx_drm_prv)
 		return NULL;
 
@@ -72,7 +71,7 @@ void *lx_drm_open(void)
 
 	lx_drm_prv->inode->i_rdev = MKDEV(DRM_MAJOR, DRM_MINOR_PRIMARY);
 
-	lx_drm_prv->file = (struct file*)kzalloc(sizeof (struct file), 0);
+	lx_drm_prv->file = (struct file*)kzalloc(sizeof (struct file), GFP_KERNEL);
 	if (!lx_drm_prv->file)
 		goto free_inode;
 
@@ -459,7 +458,12 @@ int lx_drm_ioctl_gem_close(void *lx_drm_prv, unsigned int handle)
 
 #include <drm/drm_gem.h>
 #include <drm/drm_vma_manager.h>
-#include <lx_emul/shmem_file.h>
+
+struct shmem_file_buffer
+{
+	struct folio *folio;
+};
+
 
 void *genode_lookup_mapping_from_offset(void *p,
                                         unsigned long offset,
@@ -506,7 +510,8 @@ void *genode_lookup_mapping_from_offset(void *p,
 					struct shmem_file_buffer *private_data =
 						mapping->private_data;
 					if (private_data) {
-						return private_data->addr;
+						void * addr = page_address(folio_page(private_data->folio, 0));
+						return addr;
 					}
 				}
 			}
@@ -537,7 +542,7 @@ struct inode *alloc_anon_inode(struct super_block *s)
 {
 	struct inode *inode;
 
-	inode = kzalloc(sizeof (struct inode), 0);
+	inode = kzalloc(sizeof (struct inode), GFP_KERNEL);
 	if (!inode) {
 		return (struct inode*)ERR_PTR(-ENOMEM);
 	}
@@ -576,7 +581,7 @@ struct vfsmount * kern_mount(struct file_system_type * type)
 {
 	struct vfsmount *m;
 
-	m = kzalloc(sizeof (struct vfsmount), 0);
+	m = kzalloc(sizeof (struct vfsmount), GFP_KERNEL);
 	if (!m) {
 		return (struct vfsmount*)ERR_PTR(-ENOMEM);
 	}
@@ -595,4 +600,285 @@ int dma_map_sgtable(struct device *dev, struct sg_table *sgt,
 		return nents;
 	sgt->nents = nents;
 	return 0;
+}
+
+
+/*
+ * Very very basic folio free-up emulation
+ */
+#include <linux/memcontrol.h>
+#include <linux/pagevec.h>
+
+
+void check_move_unevictable_folios(struct folio_batch *fbatch)
+{
+	lx_emul_trace(__func__);
+}
+
+
+void free_huge_folio(struct folio *folio)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+void folio_undo_large_rmappable(struct folio *folio)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+void free_unref_page(struct page *page, unsigned int order)
+{
+	lx_emul_trace_and_stop(__func__);
+}
+
+
+#include <linux/mm.h>
+
+bool folio_mark_dirty(struct folio * folio)
+{
+	if (!folio_test_dirty(folio))
+		return !folio_test_set_dirty(folio);
+	return false;
+}
+
+
+
+
+/*
+ * see linux/src/linux/mm/page_alloc.c - mostly original code, beside __folio_put
+ */
+void destroy_large_folio(struct folio *folio)
+{
+	if (folio_test_hugetlb(folio)) {
+		free_huge_folio(folio);
+		return;
+	}
+
+	if (folio_test_large_rmappable(folio))
+		folio_undo_large_rmappable(folio);
+
+	mem_cgroup_uncharge(folio);
+
+	__folio_put(folio);
+}
+
+
+
+/*
+ * see linux/src/linux/mm/swap.c - this is a very shorten version of it
+ */
+static void __page_cache_release(struct folio *folio)
+{
+	if (folio_test_lru(folio)) {
+		lx_emul_trace_and_stop(__func__);
+	}
+	/* See comment on folio_test_mlocked in release_pages() */
+	if (unlikely(folio_test_mlocked(folio))) {
+		lx_emul_trace_and_stop(__func__);
+	}
+}
+
+
+/*
+ * see linux/src/linux/mm/swap.c - original code
+ */
+static void __folio_put_large(struct folio *folio)
+{
+	/*
+	 * __page_cache_release() is supposed to be called for thp, not for
+	 * hugetlb. This is because hugetlb page does never have PageLRU set
+	 * (it's never listed to any LRU lists) and no memcg routines should
+	 * be called for hugetlb (it has a separate hugetlb_cgroup.)
+	 */
+	if (!folio_test_hugetlb(folio))
+		__page_cache_release(folio);
+	destroy_large_folio(folio);
+}
+
+
+/*
+ * see linux/src/linux/mm/swap.c - this is a very shorten version of it
+ */
+void release_pages(release_pages_arg arg, int nr)
+{
+	int i;
+	struct encoded_page **encoded = arg.encoded_pages;
+
+	for (i = 0; i < nr; i++) {
+		struct folio *folio;
+
+		/* Turn any of the argument types into a folio */
+		folio = page_folio(encoded_page_ptr(encoded[i]));
+
+		if (is_huge_zero_page(&folio->page))
+			continue;
+
+		if (folio_is_zone_device(folio))
+			lx_emul_trace_and_stop(__func__);
+
+		if (!folio_put_testzero(folio))
+			continue;
+
+		if (folio_test_large(folio)) {
+			lx_emul_trace(__func__);
+			__folio_put_large(folio);
+			continue;
+		}
+
+		if (folio_test_lru(folio))
+			lx_emul_trace_and_stop(__func__);
+
+		if (unlikely(folio_test_mlocked(folio)))
+			lx_emul_trace_and_stop(__func__);
+	}
+}
+
+
+void __folio_batch_release(struct folio_batch *fbatch)
+{
+	lx_emul_trace(__func__);
+
+	release_pages(fbatch->folios, folio_batch_count(fbatch));
+	folio_batch_reinit(fbatch);
+}
+
+
+struct file *shmem_file_setup(char const *name, loff_t size,
+                              unsigned long flags)
+{
+	struct file *f;
+	struct inode *inode;
+	struct address_space *mapping;
+	struct shmem_file_buffer *private_data;
+	loff_t   const nrpages = DIV_ROUND_UP(size, PAGE_SIZE);
+	unsigned const order   = order_base_2(nrpages);
+
+	if (!size)
+		return (struct file*)ERR_PTR(-EINVAL);
+
+	f = kzalloc(sizeof (struct file), GFP_KERNEL);
+	if (!f) {
+		return (struct file*)ERR_PTR(-ENOMEM);
+	}
+
+	inode = kzalloc(sizeof (struct inode), GFP_KERNEL);
+	if (!inode) {
+		goto err_inode;
+	}
+
+	mapping = kzalloc(sizeof (struct address_space), GFP_KERNEL);
+	if (!mapping) {
+		goto err_mapping;
+	}
+
+	private_data = kzalloc(sizeof (struct shmem_file_buffer), GFP_KERNEL);
+	if (!private_data) {
+		goto err_private_data;
+	}
+
+	mapping->private_data = private_data;
+	mapping->nrpages = nrpages;
+
+	inode->i_mapping = mapping;
+
+	atomic_long_set(&f->f_count, 1);
+	f->f_inode    = inode;
+	f->f_mapping  = mapping;
+	f->f_flags    = flags;
+	f->f_mode     = OPEN_FMODE(flags);
+	f->f_mode    |= FMODE_OPENED;
+
+	private_data->folio  = vma_alloc_folio(GFP_KERNEL, order, NULL, 0, true);
+	return f;
+
+err_private_data:
+	kfree(mapping);
+err_mapping:
+	kfree(inode);
+err_inode:
+	kfree(f);
+	return (struct file*)ERR_PTR(-ENOMEM);
+}
+
+
+static void _free_file(struct file *file)
+{
+	struct inode *inode;
+	struct address_space *mapping;
+	struct shmem_file_buffer *private_data;
+
+
+	mapping      = file->f_mapping;
+	inode        = file->f_inode;
+
+	if (mapping) {
+		private_data = mapping->private_data;
+
+		if (private_data->folio) {
+			/* freed by indirect call of __folio_batch_release in lx_emul.c */
+			private_data->folio = NULL;
+		}
+
+		kfree(private_data);
+		kfree(mapping);
+	}
+
+	kfree(inode);
+	kfree(file->f_path.dentry);
+	kfree(file);
+}
+
+
+void fput(struct file *file)
+{
+	if (!file)
+		return;
+
+	if (atomic_long_sub_and_test(1, &file->f_count)) {
+		_free_file(file);
+	}
+}
+
+
+/*
+ * Identical to original from mm/page_alloc.c
+ */
+struct folio *__folio_alloc(gfp_t gfp, unsigned int order, int preferred_nid,
+		nodemask_t *nodemask)
+{
+	struct page *page = __alloc_pages(gfp | __GFP_COMP, order,
+			preferred_nid, nodemask);
+	struct folio *folio = (struct folio *)page;
+
+	if (folio && order > 1)
+		folio_prep_large_rmappable(folio);
+
+	return folio;
+}
+
+
+struct folio *shmem_read_folio_gfp(struct address_space *mapping,
+                                   pgoff_t index, gfp_t gfp)
+{
+	struct shmem_file_buffer *private_data;
+
+	if (index > mapping->nrpages)
+		return NULL;
+
+	private_data = mapping->private_data;
+
+	if (index != 0) {
+		printk("%s unsupported case - fail\n", __func__);
+		return NULL;
+	}
+
+	if (!private_data->folio) {
+		unsigned order       = order_base_2(mapping->nrpages);
+		/* essence of shmem_alloc_folio function */
+		private_data->folio  = vma_alloc_folio(gfp, order, NULL, 0, true);
+	}
+
+	return private_data->folio;
 }

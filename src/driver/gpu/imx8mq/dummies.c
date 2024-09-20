@@ -720,3 +720,11 @@ long strnlen_user(const char __user * str,long count)
 {
 	lx_emul_trace_and_stop(__func__);
 }
+
+
+#include <linux/pid.h>
+
+void put_pid(struct pid * pid)
+{
+	lx_emul_trace(__func__);
+}

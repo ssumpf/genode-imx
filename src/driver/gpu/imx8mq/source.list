@@ -20,9 +20,9 @@ drivers/base/driver.c
 drivers/base/platform.c
 drivers/base/property.c
 drivers/base/regmap/regcache-flat.c
+drivers/base/regmap/regcache-maple.c
 drivers/base/regmap/regcache-rbtree.c
 drivers/base/regmap/regcache.c
-drivers/base/regmap/regcache-maple.c
 drivers/base/regmap/regmap-mmio.c
 drivers/base/regmap/regmap.c
 drivers/clk/clk-devres.c
@@ -157,6 +157,7 @@ lib/klist.c
 lib/kobject.c
 lib/list_sort.c
 lib/maple_tree.c
+lib/math/reciprocal_div.c
 lib/radix-tree.c
 lib/rbtree.c
 lib/refcount.c

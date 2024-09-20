@@ -1,7 +1,7 @@
 /*
  * \brief  Dummy definitions of Linux Kernel functions
  * \author Automatically generated file - do no edit
- * \date   2024-09-12
+ * \date   2024-09-18
  */
 
 #include <lx_emul.h>
@@ -33,14 +33,6 @@ const struct earlycon_id __earlycon_table_end[] = {};
 #include <linux/file.h>
 
 unsigned long __fdget(unsigned int fd)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/pagevec.h>
-
-void __folio_batch_release(struct folio_batch * fbatch)
 {
 	lx_emul_trace_and_stop(__func__);
 }
@@ -239,14 +231,6 @@ void bust_spinlocks(int yes)
 }
 
 
-#include <linux/swap.h>
-
-void check_move_unevictable_folios(struct folio_batch * fbatch)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 #include <linux/console.h>
 
 void console_flush_on_panic(enum con_flush_mode mode)
@@ -411,14 +395,6 @@ struct pglist_data * first_online_pgdat(void)
 #include <linux/swap.h>
 
 void folio_mark_accessed(struct folio * folio)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/mm.h>
-
-bool folio_mark_dirty(struct folio * folio)
 {
 	lx_emul_trace_and_stop(__func__);
 }
@@ -810,14 +786,6 @@ int proc_douintvec(struct ctl_table * table,int write,void * buffer,size_t * len
 }
 
 
-#include <linux/pid.h>
-
-void put_pid(struct pid * pid)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
 #include <linux/file.h>
 
 void put_unused_fd(unsigned int fd)
@@ -851,14 +819,6 @@ void rcu_barrier(void)
 #include <linux/reboot.h>
 
 enum reboot_mode reboot_mode;
-
-
-#include <linux/reciprocal_div.h>
-
-struct reciprocal_value reciprocal_value(u32 d)
-{
-	lx_emul_trace_and_stop(__func__);
-}
 
 
 #include <linux/ioport.h>
@@ -902,14 +862,6 @@ void set_rq_offline(struct rq * rq)
 
 extern void set_rq_online(struct rq * rq);
 void set_rq_online(struct rq * rq)
-{
-	lx_emul_trace_and_stop(__func__);
-}
-
-
-#include <linux/shmem_fs.h>
-
-struct folio * shmem_read_folio_gfp(struct address_space * mapping,pgoff_t index,gfp_t gfp)
 {
 	lx_emul_trace_and_stop(__func__);
 }
