@@ -13,6 +13,7 @@
 		<route>
 			<service name="Platform"> <parent label="gpu"/> </service>
 			<service name="Gui">      <parent/>             </service>
+			<service name="ROM" label="imx8mq_gpu">      <parent/>             </service>
 		</route>
 	</start>
 

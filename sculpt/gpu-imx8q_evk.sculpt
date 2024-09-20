@@ -6,3 +6,9 @@ import: pkg/glmark2-imx8q_evk
 
 deploy: gpu-imx8q_evk
 ram_fs: depot
+
+depot: ssumpf_test
+
+build: app/sculpt_manager lib/libc monitor driver/gpu/imx8mq
+
+manager: use_ram_fs
