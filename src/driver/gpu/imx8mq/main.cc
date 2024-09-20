@@ -536,7 +536,7 @@ extern "C" int gpu_task_func(void *p)
 				void *gem_submit = buffers.local_addr(r.operation.id);
 				if (!gem_submit)
 					break;
-
+#if 0
 				int err = 0;
 				unsigned nr_bos = lx_drm_gem_submit_bo_count(gem_submit);
 				for (unsigned i = 0; i < nr_bos; i++) {
@@ -568,20 +568,21 @@ extern "C" int gpu_task_func(void *p)
 					error("lx_drm_ioctl_etnaviv_gem_submit: ", err);
 					break;
 				}
-
-				r.operation.seqno.value = fence_id;
+#endif
+				r.operation.seqno.value = r.operation.seqno.value;
+				//r.operation.seqno.value = fence_id;
 				r.success = true;
 
 				break;
 			}
 			case OP::WAIT:
 			{
-				uint32_t const fence_id = (uint32_t) r.operation.seqno.value;
+				//uint32_t const fence_id = (uint32_t) r.operation.seqno.value;
 
-				int const err = lx_drm_ioctl_etnaviv_wait_fence(args.drm, fence_id);
+				//int const err = lx_drm_ioctl_etnaviv_wait_fence(args.drm, fence_id);
 				notify_client = true;
-				if (err)
-					break;
+				//if (err)
+				//	break;
 
 				r.success = true;
 				break;
@@ -984,7 +985,10 @@ struct Gpu::Session_component : public Genode::Session_object<Gpu::Session>
 				Gpu::Request *cr = _lx_task_args._completed_request;
 				if (cr && cr->operation.type == Gpu::Operation::Type::MAP) {
 					_pending_map = false;
-					return _buffers.lookup_buffer(cr->operation.id);
+					Dataspace_capability c =  _buffers.lookup_buffer(cr->operation.id);
+					Genode::log(__func__, ":", __LINE__, " *drm: ", Genode::Hex(*((unsigned long *)_lx_task_args.drm)),
+					            " drm", _lx_task_args.drm);
+					return c;
 				}
 			}
 
@@ -1002,11 +1006,15 @@ struct Gpu::Session_component : public Genode::Session_object<Gpu::Session>
 			};
 			_schedule_request(r, success, fail);
 
+			Genode::log(__func__, ":", __LINE__, " *drm: ", Genode::Hex(*((unsigned long *)_lx_task_args.drm)),
+			            " drm", _lx_task_args.drm);
 			return cap;
 		}
 
 		void unmap_cpu(Gpu::Vram_id id) override
 		{
+			Genode::log(__func__, ":", __LINE__, " *drm: ", Genode::Hex(*((unsigned long *)_lx_task_args.drm)),
+			            " drm", _lx_task_args.drm);
 			Gpu::Request r = Gpu::Request::create(this, Gpu::Operation::Type::UNMAP);
 			r.operation.id = id;
 
